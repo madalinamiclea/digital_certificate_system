@@ -21,12 +21,11 @@
 #define CERT_DIR CERTS_DIR "/certs"
 
 
-// Error handling macro
+// Macro for error handling
 #define handle_error(msg) do { perror(msg); exit(1); } while (0)
 
 using namespace std;
 
-// Get current time
 time_t get_current_time() {
     time_t now = time(0);
     return now;
@@ -76,7 +75,7 @@ EVP_PKEY_CTX_free(ctx);
     cout << "Root certificate generated successfully." << endl;
 }
 
-// Generate a certificate signed by the root certificate
+// Function to generate a certificate signed by the root certificate
 void generate_certificate(const string &domain, const string &issuer_cert_file, const string &issuer_key_file, int days_valid = 365) {
     // Load issuer private key
     FILE *key_file = fopen(issuer_key_file.c_str(), "rb");
@@ -243,7 +242,6 @@ bool validate_certificate(const string &cert_file, EVP_PKEY *ca_pubkey) {
         ERR_error_string_n(err, err_msg, sizeof(err_msg));
         cerr << "Error: Certificate validation failed. OpenSSL error: " << err_msg << endl;
 
-        // Afișează issuer-ul și subject-ul certificatului pentru diagnosticare
         cout << "Certificate Subject: "
              << X509_NAME_oneline(X509_get_subject_name(cert), NULL, 0) << endl;
         cout << "Certificate Issuer: "
@@ -281,7 +279,7 @@ vector<uint8_t> decrypt_with_private_key(const vector<uint8_t> &encrypted_key, E
         return {};
     }
 
-    decrypted_key.resize(decrypted_len); // Ajustează dimensiunea cheii după decriptare
+    decrypted_key.resize(decrypted_len);
     EVP_PKEY_CTX_free(ctx);
     return decrypted_key;
 }
@@ -296,11 +294,9 @@ void renew_certificate_if_needed(const string &domain, const string &issuer_cert
     fclose(cert_file);
     if (!existing_cert) handle_error("Failed to load existing certificate");
 
-    // Check expiration date
     ASN1_TIME *not_after = X509_get_notAfter(existing_cert);
     time_t current_time = get_current_time();
     if (ASN1_TIME_diff(NULL, NULL, not_after, NULL) < 0) {
-        // If expired, renew the certificate
         generate_certificate(domain, issuer_cert_file, issuer_key_file);
     }
 
@@ -308,7 +304,7 @@ void renew_certificate_if_needed(const string &domain, const string &issuer_cert
 }
 
 int main() {
-    // Creează structura de directoare
+    // Here we check if we have Windows or another operating system to make directories
 #ifdef _WIN32
     system("if not exist ..\\certs mkdir ..\\certs");
     system("if not exist ..\\certs\\certs mkdir ..\\certs\\certs");
@@ -316,12 +312,12 @@ int main() {
     system("mkdir -p ../certs/certs");
 #endif
 
-    // 1. Generare certificare pentru User A și User B
+    // Generating the certificates for both users
     generate_root_certificate();
     generate_user_certificate("UserA", ROOT_CERT_FILE, ROOT_KEY_FILE);
     generate_user_certificate("UserB", ROOT_CERT_FILE, ROOT_KEY_FILE);
 
-    // 2. User A obține certificatul lui User B
+    // Transfer of the certificate from user A to user B
     FILE *fp_B = fopen(CERT_DIR "/UserB_cert.pem", "r");
     if (!fp_B) {
         cerr << "Error: Could not open UserB certificate at " << CERT_DIR "/UserB_cert.pem" << endl;
@@ -339,17 +335,16 @@ int main() {
         return 1;
     }
 
-    // Afișează detalii despre certificatul UserB
     BIO *out = BIO_new_fp(stdout, BIO_NOCLOSE);
     cout << "UserB certificate details:" << endl;
     X509_print(out, cert_B);
     BIO_free(out);
 
-    // 3. Criptarea cheii simetrice de către User A
+    // User A encrypts the simetric key
     vector<uint8_t> symmetric_key = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
     vector<uint8_t> encrypted_key = encrypt_with_public_key(symmetric_key, pubkey_B);
 
-    // 4. Validarea certificatului lui User B
+    // Here we validate the User's B certificate
     FILE *ca_fp = fopen(ROOT_CERT_FILE, "r");
     if (!ca_fp) {
         cerr << "Error: Could not open root certificate at " << ROOT_CERT_FILE << endl;
@@ -367,13 +362,13 @@ int main() {
         return 1;
     }
 
-    // Afișează detalii despre certificatul root
+    // ROOT CERTIFICATE DETAILS
     cout << "Root certificate details:" << endl;
     BIO *out_root = BIO_new_fp(stdout, BIO_NOCLOSE);
     X509_print(out_root, root_cert);
     BIO_free(out_root);
 
-    // Afișează detalii despre cheia publică
+    // PUBLIC KEY DETAILS
     cout << "Public key type: " << EVP_PKEY_base_id(ca_pubkey) << endl;
     if (EVP_PKEY_base_id(ca_pubkey) == EVP_PKEY_RSA) {
         cout << "Public key is RSA." << endl;
@@ -390,7 +385,7 @@ int main() {
         return 1;
     }
 
-    // 5. Decriptarea cheii simetrice de către User B
+    // Decrypting the simetric key by User B
     FILE *fp_priv_B = fopen(CERT_DIR "/UserB_key.pem", "r");
     if (!fp_priv_B) {
         cerr << "Error: Could not open UserB private key at " << CERT_DIR "/UserB_key.pem" << endl;
@@ -400,14 +395,14 @@ int main() {
     fclose(fp_priv_B);
     vector<uint8_t> decrypted_key = decrypt_with_private_key(encrypted_key, privkey_B);
 
-    // 6. Verificarea egalității cheilor
+    // Here we check if the keys match 
     if (symmetric_key != decrypted_key) {
         cout << "Error decrypting symmetric key" << endl;
         return 1;
     }
     cout << "The symmetric key was successfully transmitted and decrypted" << endl;
 
-    // 7. Criptarea și decriptarea mesajelor utilizând DES
+    // Encryption/Decryption using the algoritm from project 1
 
     DES des;
     string text = "ana are mere si";
